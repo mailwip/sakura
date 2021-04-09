@@ -14,40 +14,49 @@ import (
 var DNSServer = "1.1.1.1:53"
 
 func main() {
-	ourDomain := ".hanami.magicmail.run."
-	if os.Getenv("HANAMI_ENV") == "dev" {
-		ourDomain = ".dev.hanami.run."
-	}
+	isDev := os.Getenv("HANAMI_ENV") == "dev"
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		hostname := strings.Split(r.Host, ":")[0]
 
-		// Look up cname to find redirect rule
-		cname, err := net.LookupCNAME(hostname)
+		// Look up txt find redirect rule
+		txt, err := net.LookupTXT(fmt.Sprintf("hanami-forward.%s", hostname))
 		if err != nil {
-			w.Write([]byte("Fail dns look up. Retry"))
+			w.Write([]byte(fmt.Sprintf(instruction, hostname)))
 			return
 		}
 
-		fmt.Println("Found cname", cname)
-		if !strings.HasSuffix(cname, ourDomain) {
-			w.Write([]byte("Invalid request. Did you forgot to convert"))
+		if len(txt) == 0 {
+			w.Write([]byte(fmt.Sprintf(instruction, hostname)))
 			return
 		}
 
-		ourHostPosition := strings.Index(cname, ourDomain)
+		redirectTo := txt[0]
 
-		userDomainName := cname[0:ourHostPosition]
+		if !strings.HasPrefix(redirectTo, "http") {
+			redirectTo = "http://" + redirectTo
+		}
 
-		//originalDomain := strings.ReplaceAll(underscoreOriginalHostname, "_", ".")
-		redirectTo := fmt.Sprintf("https://%s%s", userDomainName, r.URL.Path)
-		fmt.Println("go to", redirectTo)
+		redirectTo = redirectTo + r.URL.Path
 
 		http.Redirect(w, r, redirectTo, 302)
 	})
 
-	http.ListenAndServe(":4040", r)
+	if isDev {
+		http.ListenAndServe(":4040", r)
+	} else {
+		http.ListenAndServe(":80", r)
+	}
 
 }
+
+const instruction = `To forgot your URL with hanami.run forwarding service, you will need to create a TXT record on your domain and point to the redirectURL
+
+TYPE: TXT
+Hostname: hanami-forward.%s
+Value: [the-url-to-redirect-to]
+
+Docs: https://hanami.run/docs/url-forwarding
+`
