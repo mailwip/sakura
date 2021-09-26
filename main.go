@@ -39,7 +39,14 @@ func main() {
 			redirectTo = "http://" + redirectTo
 		}
 
-		redirectTo = redirectTo + r.URL.Path
+		if r.URL.Path != "/" {
+			redirectTo = redirectTo + r.URL.Path
+		}
+		fmt.Printf("Found redirect rule for %s to %s at %s\n", hostname, redirectTo, r.URL.Path)
+
+		if r.URL.RawQuery != "" {
+			redirectTo = redirectTo + "?" + r.URL.RawQuery
+		}
 
 		http.Redirect(w, r, redirectTo, 302)
 	})
@@ -47,12 +54,12 @@ func main() {
 	if isDev {
 		http.ListenAndServe(":4040", r)
 	} else {
-		http.ListenAndServe(":80", r)
+		http.ListenAndServe(":4080", r)
 	}
 
 }
 
-const instruction = `To forgot your URL with hanami.run forwarding service, you will need to create a TXT record on your domain and point to the redirectURL
+const instruction = `To rediret your URL with hanami.run forwarding service, you will need to create a TXT record on your domain and point to the redirectURL
 
 TYPE: TXT
 Hostname: hanami-forward.%s
